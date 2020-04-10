@@ -1,0 +1,2515 @@
+
+--
+-- Dumping routines for database 'vbrain'
+--
+/*!50003 DROP FUNCTION IF EXISTS `bp_run_import_sub_func_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` FUNCTION `bp_run_import_sub_func_2`() RETURNS varchar(5000) CHARSET latin1
+BEGIN
+    DECLARE v_cmp_id INT(11);
+    DECLARE v_max_wf_id INT(11) DEFAULT 1;
+    DECLARE v_max_wf_id_str VARCHAR(500) DEFAULT NULL;
+    DECLARE finished INT(1) DEFAULT 0;
+    DECLARE sub_str VARCHAR(5000) DEFAULT '';
+    DECLARE min_start_date DATETIME DEFAULT NULL;
+
+    DECLARE bp_run_cursor CURSOR FOR
+        SELECT bp.campaign_id, MAX(r.max_wf_id) FROM business_process_view_2 bp LEFT JOIN wf_bp_run r ON r.campaign_id = bp.campaign_id WHERE bp.isDisabled=0 GROUP BY bp.campaign_id;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET finished = 1;
+
+    SET min_start_date = DATE_SUB(NOW(), INTERVAL 50 day);
+
+    OPEN bp_run_cursor;
+
+        get_bp_run_data: LOOP
+            FETCH bp_run_cursor INTO v_cmp_id, v_max_wf_id;
+            IF finished = 1 THEN
+                LEAVE get_bp_run_data;
+            END IF;
+            
+            IF IFNULL(v_max_wf_id,0) = 0 THEN
+                SET v_max_wf_id_str = CONCAT('startDate > \'',DATE(min_start_date),'\'');
+            ELSE
+                SET v_max_wf_id_str = CONCAT('id > ',v_max_wf_id);
+            END IF;
+    
+            SET sub_str = CONCAT(sub_str, ' (', v_max_wf_id_str , ' AND campaign_id = ', v_cmp_id, ') OR');
+
+        END LOOP get_bp_run_data;
+
+        CLOSE bp_run_cursor;
+    
+        IF sub_str <> '' THEN
+            SET sub_str = SUBSTRING(sub_str, 1, CHAR_LENGTH(sub_str) - 2);
+        END IF;
+
+        RETURN sub_str;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP FUNCTION IF EXISTS `check_can_delete_group` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` FUNCTION `check_can_delete_group`(id INT(11)) RETURNS tinyint(1)
+    DETERMINISTIC
+BEGIN
+	 DECLARE gtype varchar(45);
+	 DECLARE flag TINYINT(1) DEFAULT 0;
+	 SELECT g.`Type` INTO gtype FROM groups g WHERE g.ID = id;
+     IF gtype = 'process' THEN
+         SELECT COUNT(*) = 0 INTO flag FROM 
+			(SELECT 1 as exist FROM bot b WHERE Process_Id = id
+			UNION ALL
+			SELECT 1 as exist FROM transactions t WHERE t.WORKER_ID = (SELECT b.ID FROM bot b WHERE Process_Id = id LIMIT 1)
+			UNION ALL
+			SELECT 1 as exist FROM wf_temp_transactions tt WHERE tt.CAMPAIGN_ID = (SELECT m.campaign_id FROM vbrain.wf_bp_mapping m
+				WHERE process_id = id)
+			UNION ALL
+			SELECT 1 as exist FROM wf_temp_datastore td WHERE td.name = (SELECT m.datastore_name FROM vbrain.wf_bp_mapping m
+				WHERE process_id = id)) AS total;
+	 ELSE 
+	 	SELECT COUNT(*) = 0 INTO flag FROM groups g WHERE g.Parent_Id = id;
+     END IF;
+     RETURN flag;
+ END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP FUNCTION IF EXISTS `check_can_delete_group_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` FUNCTION `check_can_delete_group_2`(id INT(11)) RETURNS tinyint(1)
+    DETERMINISTIC
+BEGIN
+	 DECLARE gtype varchar(45);
+	 DECLARE flag TINYINT(1) DEFAULT 0;
+	 SELECT g.`Type` INTO gtype FROM groups g WHERE g.ID = id;
+     IF gtype = 'process' THEN
+         SELECT COUNT(*) = 0 INTO flag FROM 
+			(SELECT 1 as exist FROM bot b WHERE Process_Id = id
+			UNION ALL
+			SELECT 1 as exist FROM transactions t WHERE t.WORKER_ID = (SELECT b.ID FROM bot b WHERE Process_Id = id LIMIT 1)
+			UNION ALL
+			SELECT 1 as exist FROM wf_temp_transactions tt WHERE tt.CAMPAIGN_ID = (SELECT bp.campaign_id FROM vbrain.business_process_view_2 bp
+				WHERE bp.bp_group_id = id)
+			UNION ALL
+			SELECT 1 as exist FROM wf_temp_datastore td WHERE td.business_process_id = (SELECT bp.business_process_id FROM vbrain.business_process_view_2 bp
+				WHERE bp.bp_group_id = id)) AS total;
+	 ELSE 
+	 	SELECT COUNT(*) = 0 INTO flag FROM groups g WHERE g.Parent_Id = id;
+     END IF;
+     RETURN flag;
+ END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP FUNCTION IF EXISTS `split_str` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` FUNCTION `split_str`( s VARCHAR(1024) , del CHAR(3) , i INT) RETURNS varchar(1024) CHARSET latin1
+BEGIN
+    DECLARE n INT; 
+    
+    SET n = (LENGTH(s) - LENGTH(REPLACE(s, del, '')))/LENGTH(del) + 1;
+    IF i > n THEN
+        RETURN NULL;
+    ELSE
+        RETURN SUBSTRING_INDEX(SUBSTRING_INDEX(s, del, i) , del , -1 );        
+    END IF;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP FUNCTION IF EXISTS `t_import_sub_func` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` FUNCTION `t_import_sub_func`(p_max_submissionDate DATETIME) RETURNS varchar(5000) CHARSET latin1
+BEGIN
+    DECLARE v_cmp_id INT(11);
+    DECLARE v_max_wf_id INT(11) DEFAULT 1;
+    DECLARE v_max_wf_id_str VARCHAR(500) DEFAULT NULL;
+    DECLARE finished INT(1) DEFAULT 0;
+    DECLARE sub_str VARCHAR(5000) DEFAULT '';
+    
+    DECLARE t_cursor CURSOR FOR
+        SELECT a.campaign_id, b.WF_ID FROM business_process_view_2 a LEFT OUTER JOIN (SELECT CAMPAIGN_ID, MAX(WF_ID) AS WF_ID FROM (SELECT CAMPAIGN_ID, MAX(WF_ID) AS WF_ID FROM wf_temp_transactions WHERE WF_ID IS NOT NULL GROUP BY CAMPAIGN_ID UNION ALL SELECT CAMPAIGN_ID, MAX(WF_ID) AS WF_ID FROM wf_temp_transactions_trash WHERE WF_ID IS NOT NULL GROUP BY CAMPAIGN_ID) T GROUP BY CAMPAIGN_ID) b ON a.campaign_id = b.CAMPAIGN_ID;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET finished = 1;
+
+    OPEN t_cursor;
+
+        get_t_data: LOOP
+            FETCH t_cursor INTO v_cmp_id, v_max_wf_id;
+            IF finished = 1 THEN
+                LEAVE get_t_data;
+            END IF;
+
+            SET v_max_wf_id_str = CONCAT(v_max_wf_id);
+
+            IF IFNULL(v_max_wf_id,0) = 0 THEN
+                SET v_max_wf_id_str = CONCAT('(SELECT IFNULL(MAX(id),0) FROM wfdb.AwsHit WHERE submissionDate < \'',DATE(p_max_submissionDate),'\')');
+            END IF;
+
+            SET sub_str = CONCAT(sub_str, ' (AwsHit.id > ', v_max_wf_id_str , ' AND Run.campaign_id = ', v_cmp_id, ') OR');
+
+        END LOOP get_t_data;
+
+        CLOSE t_cursor;
+    
+        IF sub_str <> '' THEN
+            SET sub_str = SUBSTRING(sub_str, 1, CHAR_LENGTH(sub_str) - 2);
+        END IF;
+
+        RETURN sub_str;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP FUNCTION IF EXISTS `wf_transaction_max_id` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` FUNCTION `wf_transaction_max_id`() RETURNS bigint(20)
+BEGIN
+
+	DECLARE max_id BIGINT(20) DEFAULT 0;
+
+	SELECT GREATEST(MAX(tt.wf_id),MAX(ttt.wf_id)) INTO max_id 
+
+		FROM vbrain.wf_temp_transactions tt, vbrain.wf_temp_transactions_trash ttt;
+
+	RETURN max_id;
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `add_wf_business_process_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `add_wf_business_process_sp_2`(IN p_display_name VARCHAR(100), IN p_mapped_datastores VARCHAR(500), 
+    IN p_tracking_id_field VARCHAR(200), IN p_error_msg_field VARCHAR(200), 
+    IN p_system_id_field VARCHAR(200), IN p_start_date_field VARCHAR(200), IN p_bp_uuid_field VARCHAR(200),
+	IN p_end_date_field VARCHAR(200), IN p_process_time_field VARCHAR(200),
+    IN p_start_date_postgre_format VARCHAR(50), IN p_start_date_convert_format VARCHAR(50), IN p_id_order_field varchar(200))
+BEGIN
+    DECLARE max_query_order INT(11) DEFAULT 0;
+    DECLARE display_name_exists TINYINT(1) DEFAULT 0;
+
+    SELECT COUNT(display_name)>0 INTO display_name_exists 
+    FROM wf_business_process WHERE display_name = p_display_name;
+
+    IF display_name_exists = 0 THEN
+		
+	    IF p_id_order_field IS NULL THEN
+			SET p_id_order_field = CONCAT(p_start_date_field,'$$',p_system_id_field);
+		END IF;
+		
+        SELECT MAX(query_order) INTO max_query_order FROM wf_business_process;
+        
+        INSERT INTO wf_business_process(display_name, mapped_datastores, tracking_id_field, error_msg_field, 
+            system_id_field, start_date_field, bp_uuid_field, end_date_field, process_time_field, start_date_postgre_format, start_date_convert_format, query_order, id_order_field)
+        VALUES(p_display_name, p_mapped_datastores, p_tracking_id_field, p_error_msg_field, 
+            p_system_id_field, p_start_date_field, p_bp_uuid_field, p_end_date_field, p_process_time_field, p_start_date_postgre_format, p_start_date_convert_format, max_query_order+1, p_id_order_field);
+        
+        SELECT 'Business Process added successfully' AS message;
+    ELSE
+        SELECT 'Business Process already exists' AS message;
+    END IF;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `bp_run_import_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `bp_run_import_sp_2`()
+BEGIN
+        DECLARE v_max_wf_id BIGINT(20) DEFAULT 0;
+        DECLARE min_start_date DATETIME DEFAULT NULL;
+        DECLARE campaignIdList VARCHAR(2000) DEFAULT NULL;
+        DECLARE w VARCHAR(5000) DEFAULT NULL;
+
+        SELECT MAX(max_wf_id) INTO v_max_wf_id FROM wf_bp_run;
+        
+        SET min_start_date = DATE_SUB(NOW(), INTERVAL 50 day);
+
+        SELECT GROUP_CONCAT(bp.campaign_id SEPARATOR ',') INTO campaignIdList
+        FROM business_process_view_2 bp
+        WHERE bp.isDisabled = 0;
+
+        IF IFNULL(v_max_wf_id,0) = 0 THEN
+            SET w = CONCAT('startDate > \'',DATE(min_start_date),'\'');
+        ELSE
+            SET w = CONCAT('(', bp_run_import_sub_func_2(), ')');
+        END IF;
+
+        IF campaignIdList IS NOT NULL THEN
+            SET w = CONCAT(w, ' AND campaign_id IN (',campaignIdList,')');
+        END IF;
+        
+        SET w = CONCAT(w, ' GROUP BY rootRunUUID');
+
+        DROP TEMPORARY TABLE IF EXISTS `vbrain`.`bp_run_import_tmp`;
+
+        CREATE TEMPORARY TABLE `vbrain`.`bp_run_import_tmp` (
+            QE varchar(1000),
+            QT varchar(1)
+        );
+
+        INSERT INTO bp_run_import_tmp(QE, QT) VALUES
+        ('|campaign_id|campaign_id','S'),
+        ('|rootRunUUID|bp_uuid','S'),
+        ('|MIN(startDate)|start_time','S'),
+        ('|IFNULL(MAX(endDate),MAX(startDate))|end_time','S'),
+        ('|MAX(id)|max_wf_id','S'),
+        ('Run','F'),
+        (w,'W'),
+        ('|startDate|A','O'),
+        ('1000','L'),
+        ('wf_bp_run|i','T');
+
+        SELECT * FROM bp_run_import_tmp;
+
+        DROP TEMPORARY TABLE IF EXISTS `vbrain`.`bp_run_import_tmp`;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `bp_run_massage_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `bp_run_massage_sp_2`()
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;  
+        RESIGNAL;  
+    END;
+    SET autocommit = 0;
+
+    
+    START TRANSACTION;
+    
+    DROP TEMPORARY TABLE IF EXISTS bp_run_massage_tmp;
+    CREATE TEMPORARY TABLE bp_run_massage_tmp engine=memory AS
+    SELECT business_process_id, campaign_id, bp_uuid, MIN(start_time) AS start_time, MAX(end_time) AS end_time, MAX(max_wf_id) AS max_wf_id FROM wf_bp_run GROUP BY bp_uuid;
+    
+    DELETE FROM wf_bp_run;
+    
+    INSERT INTO wf_bp_run(business_process_id,campaign_id,bp_uuid,start_time,end_time,max_wf_id) 
+    SELECT business_process_id,campaign_id,bp_uuid,start_time,end_time,max_wf_id FROM bp_run_massage_tmp;
+    
+    DROP TEMPORARY TABLE IF EXISTS bp_run_massage_tmp;
+    
+    COMMIT;
+    
+    SET autocommit = 1;
+    
+    UPDATE wf_bp_run r JOIN business_process_view_2 bp ON bp.campaign_id = r.campaign_id SET r.business_process_id = bp.business_process_id WHERE r.business_process_id IS NULL;
+    
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `campaign_import_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `campaign_import_sp_2`()
+BEGIN
+	DECLARE last_updated_date VARCHAR(50);
+	SELECT IFNULL(LASTRECORD_TIMESTAMP_CAMPAIGN, from_unixtime(0)) INTO last_updated_date FROM vbrain.wf_configuration;
+	
+
+	SELECT CONCAT('SELECT cm.id as mappingId,
+		bp.id as campaingId,
+		s.id as stepId,
+		bp.title as bpName,
+		s.title as stepTitle,
+		cm.deleted as deleted,
+		cm.stepIndex as stepIndex,
+		bp.lastModified as bpLastModified,
+		s.lastModified as stepLastModified
+	FROM wfdb.CampaignMap cm
+	JOIN (SELECT title, id, lastModified FROM Campaign WHERE lastModified > ',last_updated_date,') s ON cm.campaign = s.id
+	JOIN (SELECT title, id, lastModified FROM Campaign WHERE lastModified > ',last_updated_date,') bp ON cm.parent = bp.id');
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `clean_previous_snapshot_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `clean_previous_snapshot_sp_2`()
+BEGIN
+	DECLARE current_snapshot_time DATETIME;
+
+	SELECT MAX(snapshot_time) INTO current_snapshot_time FROM wf_snapshot;
+
+
+	INSERT INTO wf_snapshot_trash (id,wf_id,bp_name,task_name,total_records,records_processed,bp_uuid,start_time,snapshot_time) 
+
+		SELECT id,wf_id,bp_name,task_name,total_records,records_processed,bp_uuid,start_time,snapshot_time FROM wf_snapshot
+		WHERE snapshot_time <> current_snapshot_time;
+
+	
+
+	DELETE FROM wf_snapshot WHERE snapshot_time <> current_snapshot_time;
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `c_import_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `c_import_sp_2`()
+BEGIN
+    DECLARE last_updated_date VARCHAR(50);
+    DECLARE w VARCHAR(5000) DEFAULT NULL;
+
+    SELECT LEAST(IFNULL(MAX(bp_lastmodified), FROM_UNIXTIME(0)), IFNULL(MAX(step_lastmodified), FROM_UNIXTIME(0))) INTO last_updated_date FROM wf_campaign;
+    
+    SET w = CONCAT('s.lastModified > \'',last_updated_date,'\' OR bp.lastModified > \'',last_updated_date, '\'');
+
+    DROP TEMPORARY TABLE IF EXISTS `vbrain`.`c_import_tmp`;
+
+    CREATE TEMPORARY TABLE `vbrain`.`c_import_tmp` (
+        QE varchar(1000),
+        QT varchar(1)
+    ); 
+
+    INSERT INTO c_import_tmp(QE, QT) VALUES 
+    ('cm|id|mapping_id','S'),
+    ('cm|deleted|deleted','S'),
+    ('cm|stepIndex|step_index','S'),
+    ('bp|id|campaign_id','S'),
+    ('bp|title|bp_name','S'),
+    ('bp|lastModified|bp_lastmodified','S'),
+    ('s|id|step_id','S'),
+    ('s|title|step_title','S'),
+    ('s|lastModified|step_lastmodified','S'),
+    ('CampaignMap cm','F'),
+    ('Campaign s|id|=|cm|campaign','J'),
+    ('Campaign bp|id|=|cm|parent','J'),
+    (w,'W'),
+    ('bp|lastModified|A','O'),
+    ('s|lastModified|A','O'),
+    ('100','L'),
+    ('wf_campaign_temp|ii','T');
+    
+    SELECT * FROM c_import_tmp;
+
+    DROP TEMPORARY TABLE IF EXISTS `vbrain`.`c_import_tmp`;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `delete_group_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `delete_group_sp`(IN group_id INT(11))
+BEGIN
+	DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+	    ROLLBACK;  
+        RESIGNAL;  
+    END;
+    IF CHECK_CAN_DELETE_GROUP(group_id) = 1 THEN
+	    SET autocommit = 0;
+	
+		
+		START TRANSACTION;
+	
+		DELETE FROM wf_bp_mapping WHERE process_id = group_id;	
+		DELETE FROM groups WHERE ID = group_id; 
+	
+		COMMIT;
+		
+		SET autocommit = 1;
+	END IF;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `delete_group_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `delete_group_sp_2`()
+BEGIN
+	DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+	    ROLLBACK;  
+        RESIGNAL;  
+    END;
+    IF CHECK_CAN_DELETE_GROUP_2(group_id) = 1 THEN
+	    SET autocommit = 0;
+		
+		START TRANSACTION;
+	
+		UPDATE wf_business_process SET group_process_id = NULL, mapping_id = NULL WHERE group_process_id = group_id;
+		DELETE FROM groups WHERE ID = group_id; 
+	
+		COMMIT;
+		
+		SET autocommit = 1;
+	END IF;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `ds_import_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ds_import_sp`()
+BEGIN
+	DECLARE v_bp_id INT(11);
+	DECLARE v_counter INT(11) DEFAULT 1;
+	DECLARE row_count INT(11);
+ 	DECLARE finished INT(1) DEFAULT 0;
+
+	DECLARE datastore_cursor CURSOR FOR 
+   		SELECT business_process_id FROM business_process_view_2 WHERE isDisabled = 0;
+   	
+   	
+ 	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finished = 1;
+   	
+   	OPEN datastore_cursor;
+    SELECT FOUND_ROWS() INTO row_count ;
+   
+    get_datastore_data: LOOP
+ 		FETCH datastore_cursor INTO v_bp_id;
+	 	IF finished = 1 THEN 
+			LEAVE get_datastore_data;
+		END IF;
+	
+		
+		CALL ds_import_sub_sp(v_bp_id, IF(v_counter = row_count, 1, 0));
+		
+		SET v_counter = v_counter + 1;
+	
+	END LOOP get_datastore_data;
+ 
+ 	CLOSE datastore_cursor;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `ds_import_sub_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ds_import_sub_sp`(IN bp_id INT(11), IN include_limit TINYINT(1))
+BEGIN
+        DECLARE max_wf_id BIGINT(20) DEFAULT 0;
+    
+        DECLARE ds_display_name VARCHAR(100) DEFAULT NULL;
+        DECLARE postgre_start_date_format VARCHAR(50);
+        DECLARE ds_table_name VARCHAR(500);
+        DECLARE field_tracking_id VARCHAR(200);
+        DECLARE field_error_msg VARCHAR(200);
+        DECLARE field_system_id VARCHAR(200);
+        DECLARE field_start_date VARCHAR(200);
+        DECLARE field_id_order VARCHAR(200);
+        DECLARE field_bp_uuid VARCHAR(200);
+		DECLARE field_end_date VARCHAR(200);
+		DECLARE field_process_time VARCHAR(200);
+
+        DECLARE front TEXT DEFAULT NULL;
+        DECLARE frontlen INT DEFAULT NULL;
+        DECLARE lp_str VARCHAR(1000);
+        DECLARE lp_substr TEXT DEFAULT NULL;
+
+        DECLARE w VARCHAR(5000) DEFAULT NULL;
+
+        DECLARE max_wf_id_tds BIGINT(20) DEFAULT 0;
+        DECLARE max_wf_id_tdst BIGINT(20) DEFAULT 0;
+
+        DECLARE start_date_str VARCHAR(500);
+
+        SELECT IFNULL(MAX(tds.wf_id),0) INTO max_wf_id_tds FROM wf_temp_datastore tds WHERE tds.business_process_id = bp_id;
+        SELECT IFNULL(MAX(tdst.wf_id),0) INTO max_wf_id_tdst FROM wf_temp_datastore_trash tdst WHERE tdst.business_process_id = bp_id;
+        SELECT GREATEST(max_wf_id_tds,max_wf_id_tdst) INTO max_wf_id;
+        
+        IF max_wf_id = 0 THEN
+             SELECT IFNULL(UNIX_TIMESTAMP(MIN(start_time))*100000,0) INTO max_wf_id FROM wf_temp_transactions WHERE campaign_id = (SELECT campaign_id FROM business_process_view_2 WHERE business_process_id = bp_id); 
+        END IF;
+
+        SELECT display_name, start_date_postgre_format, mapped_datastores, tracking_id_field, error_msg_field, system_id_field, start_date_field, id_order_field, bp_uuid_field, end_date_field, process_time_field
+                INTO ds_display_name, postgre_start_date_format, ds_table_name, field_tracking_id, field_error_msg, field_system_id, field_start_date, field_id_order, field_bp_uuid, field_end_date, field_process_time
+                FROM wf_business_process bp WHERE id = bp_id;
+
+        SELECT CONCAT('to_timestamp(',field_start_date,', \'',postgre_start_date_format,'\')') INTO start_date_str;
+        SELECT CONCAT('(EXTRACT(EPOCH FROM ',start_date_str,')*100000+ CAST(',field_system_id,' AS BIGINT)) > ',max_wf_id) INTO w;
+            
+        SET w = CONCAT('(',w,') AND ',field_start_date,' IS NOT NULL');
+
+        DROP TEMPORARY TABLE IF EXISTS `vbrain`.`d_import_tmp`;
+
+        CREATE TEMPORARY TABLE `vbrain`.`d_import_tmp` (
+                QE varchar(1000),
+                QT varchar(1)
+        );
+
+        INSERT INTO d_import_tmp(QE, QT) VALUES
+        (CONCAT('|',IFNULL(field_tracking_id,'NULL'),'|tracking_id'),'S'),
+        (CONCAT('|',IFNULL(field_error_msg,'NULL'),'|error_msg'),'S'),
+        (CONCAT('|',IFNULL(field_system_id,'NULL'),'|system_id'),'S'),
+        (CONCAT('|',IFNULL(field_start_date,'NULL'),'|start_date'),'S'),
+        (CONCAT('|\'',ds_display_name,'\'|name'),'S'),
+        (CONCAT('|',bp_id,'|business_process_id'),'S'),
+        (CONCAT('|',IFNULL(field_bp_uuid,'NULL'),'|bp_uuid'),'S'),
+		(CONCAT('|',IFNULL(field_end_date,'NULL'),'|end_date'),'S'),
+		(CONCAT('|',IFNULL(field_process_time,'NULL'),'|process_time'),'S'),
+        (ds_table_name,'F'),
+        (w,'W');
+
+        IF field_id_order IS NOT NULL THEN
+            SET lp_str = field_id_order;
+
+            iterator: LOOP
+                IF LENGTH(TRIM(lp_str)) = 0 OR lp_str IS NULL THEN
+                    LEAVE iterator;
+                END IF;
+                SET front = SUBSTRING_INDEX(lp_str,'$$',1);
+                SET frontlen = LENGTH(front);
+                SET lp_substr = TRIM(front);
+
+                INSERT INTO d_import_tmp(QE, QT) VALUES
+                (CONCAT('|',lp_substr,'|A'),'O');
+
+                SET lp_str = INSERT(lp_str,1,frontlen + 2,'');
+            END LOOP;
+        END IF;
+
+        INSERT INTO d_import_tmp(QE, QT) VALUES
+        ('1000','L'),
+        ('wf_temp_datastore|ii','T');
+
+        SELECT * FROM d_import_tmp;
+
+        DROP TEMPORARY TABLE IF EXISTS `vbrain`.`d_import_tmp`;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `get_runs_for_function_sp_3` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `get_runs_for_function_sp_3`(IN p_function VARCHAR(100), IN p_start_date VARCHAR(20), IN p_end_date VARCHAR(20))
+BEGIN
+    SELECT COUNT(*) totalTransaction, 
+        vt.bp_uuid bp_uuid,
+        COUNT(DISTINCT(vt.worker_id)) totalWorker,  
+        vt.process_name processName, 
+        MIN(CAST(vt.start_time AS CHAR)) first_trans_start_date_time,
+        SUM(vt.efforts_saved) Efforts_Saved, 
+        SUM(vt.duration) AS Duration, 
+        vt.worker_type AS worker, 
+        COALESCE(SUM(vt.error_cat = 1), 0) business_error, 
+        COALESCE(SUM(vt.error_cat = 2), 0) technical_error, 
+        COALESCE(SUM(vt.error_cat IS NULL), 0) success, 
+        (SELECT sequence FROM sequence_temp st WHERE process_name = vt.process_name) AS sequence 
+    FROM group_transaction_view vt 
+    WHERE vt.status = 0 AND vt.worker_status = '0' AND 
+        vt.tracking_id IS NOT NULL AND 
+        vt.function = p_function AND 
+        vt.START_TIME >= STR_TO_DATE(p_start_date, '%m/%d/%Y') AND 
+        vt.END_TIME <=  DATE_ADD( STR_TO_DATE(p_end_date, '%m/%d/%Y'), INTERVAL 1 DAY) AND 
+        vt.process_id = (SELECT id FROM groups WHERE isDisabled = '0'  AND id = vt.process_id ) 
+    GROUP BY bp_uuid, worker_type 
+    ORDER BY sequence, worker_type, first_trans_start_date_time DESC;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `get_runs_region_wise_sp_3` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `get_runs_region_wise_sp_3`(IN p_function VARCHAR(100), IN p_start_date VARCHAR(20), IN p_end_date VARCHAR(20))
+BEGIN
+    SELECT COUNT(*) totalTransaction, 
+        bp_uuid, 
+        process_Name, 
+        MIN(CAST(vt.start_time AS CHAR)) first_trans_start_date_time, 
+        country, worker_type, 
+        (SELECT sequence FROM sequence_temp WHERE process_name = vt.process_name) AS sequence 
+    FROM group_transaction_view vt 
+    WHERE vt.tracking_id IS NOT NULL AND vt.status = '0' AND vt.worker_status = '0' AND 
+        vt.process_id = (SELECT id FROM groups WHERE isDisabled = '0'  AND id = vt.process_id ) AND 
+        vt.function = p_function AND 
+        vt.START_TIME >= STR_TO_DATE(p_start_date, '%m/%d/%Y') AND 
+        vt.END_TIME <=  DATE_ADD( STR_TO_DATE(p_end_date, '%m/%d/%Y'), INTERVAL 1 DAY) 
+    GROUP BY bp_uuid, country, worker_type 
+    ORDER BY sequence, country, worker_type;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `get_transactions_for_run_sp_3` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `get_transactions_for_run_sp_3`(IN p_bp_uuid VARCHAR(200), IN p_group_by VARCHAR(30))
+BEGIN
+    DECLARE start_date_format VARCHAR(50) DEFAULT '%m/%d/%Y %H:%i:%s';
+
+    IF p_group_by = 'daily' THEN
+        SET start_date_format = '%m/%d/%Y %H:%i:%s';
+    ELSEIF p_group_by = 'monthly' THEN
+        SET start_date_format = '%M/%Y';
+    ELSEIF p_group_by = 'yearly' THEN
+        SET start_date_format = '%Y';
+    END IF;
+    
+    SELECT DATE_FORMAT(t.start_time, start_date_format) AS transactionDate, 
+           t.tracking_id AS tracking_id, t.status AS status, 
+           t.process_id AS process_id, t.process_name AS process_name, 
+           t.duration AS duration, t.efforts_saved AS efforts_saved, 
+           t.error_type AS error_type, e.type AS error_cat
+    FROM group_transaction_view t
+    LEFT JOIN wf_exception_category e ON t.error_cat = e.id
+    WHERE t.tracking_id IS NOT NULL 
+        AND t.status = '0' 
+        AND t.worker_status = '0'  
+        AND t.bp_uuid=p_bp_uuid;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `import_details_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `import_details_sp`()
+BEGIN
+    DROP TEMPORARY TABLE IF EXISTS `vbrain`.`import_details_tmp`;
+
+    CREATE TEMPORARY TABLE `vbrain`.`import_details_tmp` (
+        entity varchar(1),
+        import varchar(100),
+        importParamValues varchar(100),
+        post varchar(100),
+        postParamValues varchar(100)
+    );
+
+    INSERT INTO import_details_tmp(entity, import, importParamValues, post, postParamValues) VALUES
+    ('T','t_import_sp',NULL,NULL,NULL),
+    ('T','bp_run_import_sp_2',NULL,'bp_run_massage_sp_2',NULL),
+    ('D','ds_import_sp',NULL,'wf_temp_datastore_massage_sp',NULL),
+    ('C','c_import_sp_2',NULL,'wf_campaign_massage_sp',NULL),
+	('S','ss_import_sp_2',NULL,NULL,NULL);
+    
+    SELECT * FROM import_details_tmp;
+
+    DROP TEMPORARY TABLE IF EXISTS `vbrain`.`import_details_tmp`;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `insert_or_update_exception_type_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `insert_or_update_exception_type_sp_2`(IN p_exception_id INT(11), IN p_lob_id INT(11), IN p_exception_category_id INT(11), IN p_exception_str VARCHAR(500))
+BEGIN
+    
+    IF p_exception_id IS NULL THEN
+        INSERT INTO exceptions (Lob, Exception_Type, Exception_Value) 
+        VALUES (p_lob_id, p_exception_category_id, p_exception_str);
+    ELSE
+        UPDATE exceptions SET Lob = p_lob_id, Exception_Type = p_exception_category_id, Exception_Value = p_exception_str
+        WHERE ID = p_exception_id;
+    END IF;
+    
+    UPDATE vbrain.transactions t
+    JOIN (SELECT bp.BOT_ID, Exception_Type, Exception_Value
+        FROM vbrain.exceptions e 
+        JOIN vbrain.business_process_bot_view_2 bp ON bp.lob_id = e.Lob) te 
+    ON t.WORKER_ID = te.BOT_ID 
+    SET t.ERROR_CAT = te.Exception_Type
+    WHERE t.ERROR_CAT IS NULL AND t.ERROR_TYPE LIKE concat('%', te.Exception_Value, '%');
+    
+    UPDATE vbrain.wf_temp_datastore ds
+    JOIN (SELECT bp.business_process_id, Exception_Type, Exception_Value
+        FROM vbrain.exceptions e 
+        JOIN vbrain.business_process_view_2 bp ON bp.lob_id = e.Lob) te 
+    ON ds.business_process_id = te.business_process_id 
+    SET ds.ERROR_CAT = te.Exception_Type
+    WHERE ds.ERROR_CAT IS NULL AND ds.error_msg LIKE concat('%', te.Exception_Value, '%');
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `select_bp_config_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `select_bp_config_sp_2`(IN group_id INT(11))
+BEGIN
+	IF group_id IS NOT NULL THEN
+		SELECT business_process_id AS bp_id, bp_group_id AS group_id, campaign_id, mapping_id 
+		FROM business_process_view_2 
+		WHERE bp_group_id = group_id;
+	ELSE
+		SELECT NULL AS bp_id, NULL AS group_id, NULL AS campaign_id, NULL AS mapping_id LIMIT 0; 
+	END IF;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `select_bp_list_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `select_bp_list_sp_2`(IN include_group_id INT(11))
+BEGIN
+	IF include_group_id IS NOT NULL OR include_group_id > 0 THEN
+		SELECT id, display_name 
+		FROM wf_business_process 
+		WHERE mapped_datastores IS NOT NULL AND tracking_id_field IS NOT NULL AND error_msg_field IS NOT NULL
+			AND (mapping_id IS NULL OR group_process_id = include_group_id) 
+		ORDER BY display_name;
+	ELSE 
+		SELECT id, display_name 
+		FROM wf_business_process 
+		WHERE mapped_datastores IS NOT NULL AND tracking_id_field IS NOT NULL AND error_msg_field IS NOT NULL
+			AND mapping_id IS NULL
+		ORDER BY display_name;
+	END IF;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `select_current_snapshot_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `select_current_snapshot_sp_2`()
+BEGIN
+	SELECT c.bp_name, s.task_name, s.total_records, s.records_processed, s.bp_uuid, s.start_time, s.snapshot_time 
+	FROM wf_snapshot s 
+	JOIN (
+		SELECT DISTINCT campaign_id, bp_name FROM wf_campaign
+	) c ON c.campaign_id = s.campaign_id 
+	WHERE s.snapshot_time = (SELECT MAX(snapshot_time) FROM wf_snapshot);
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `select_unmapped_campaigns_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `select_unmapped_campaigns_sp_2`(IN include_group_id INT(11))
+BEGIN
+	IF include_group_id IS NOT NULL OR include_group_id > 0 THEN
+		SELECT c.campaign_id, c.step_id, MAX(c.mapping_id) as mapping_id, c.bp_name, c.step_title, c.step_index 
+		FROM wf_campaign c 
+		WHERE campaign_id NOT IN (
+			SELECT c.campaign_id FROM wf_business_process bp JOIN wf_campaign c ON c.mapping_id = bp.mapping_id
+			WHERE bp.group_process_id <> include_group_id) 
+		GROUP BY c.campaign_id, c.step_id
+		ORDER BY c.bp_name, c.bp_lastmodified DESC;
+	ELSE 
+		SELECT c.campaign_id, c.step_id, MAX(c.mapping_id) as mapping_id, c.bp_name, c.step_title, c.step_index 
+		FROM wf_campaign c 
+		WHERE campaign_id NOT IN (SELECT c.campaign_id FROM wf_business_process bp JOIN wf_campaign c ON c.mapping_id = bp.mapping_id) 
+		GROUP BY c.campaign_id, c.step_id
+		ORDER BY c.bp_name, c.bp_lastmodified DESC;
+	END IF;
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `ss_import_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ss_import_sp_2`()
+BEGIN
+	DROP TEMPORARY TABLE IF EXISTS `vbrain`.`ss_import_tmp`;
+
+	CREATE TEMPORARY TABLE `vbrain`.`ss_import_tmp` (
+		QE varchar(1000),
+		QT varchar(1)
+	); 
+
+	INSERT INTO ss_import_tmp(QE, QT) VALUES 
+	('|id|wf_id','S'),
+	('|campaign_id|campaign_id','S'),
+	('|title|task_name','S'),
+	('|recordCount|total_records','S'),
+	('|totalAssignmentCount|records_processed','S'),
+	('|rootRunUUID|bp_uuid','S'),
+	('|startDate|start_time','S'),
+	(CONCAT('|\'',NOW(),'\'|snapshot_time'),'S'),
+	('Run','F'),
+	('status = \'MACHINE_PROCESSING\'','W'),
+	('wf_snapshot|ii','T');
+	
+	SELECT * FROM ss_import_tmp;
+
+	DROP TEMPORARY TABLE IF EXISTS `vbrain`.`ss_import_tmp`;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `testing_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `testing_sp`(IN v_start_date CHAR(100), IN v_name CHAR(100))
+BEGIN
+
+	UPDATE datastore ds 
+	JOIN (
+		SELECT t2.ID, t1.system_id, t1.start_date, t1.name
+		FROM (
+			-- Select datastore rows with row numbers
+			SELECT ds.system_id, ds.start_date, ds.name, @curRow := @curRow + 1 AS row_number
+		      FROM datastore ds
+		      	-- Row numbers
+		         JOIN    (SELECT @curRow := 0) r 
+		         WHERE ds.start_date = 'Wed Dec 19 00:30:00 UTC 2018' AND ds.name = 'ds_ds_tps_run_statistics' ORDER BY ds.system_id) t1
+		JOIN (
+		 	-- Select ids from temp transactions with row numbers
+		 	SELECT t.ID, @curRow2 := @curRow2 + 1 AS row_number
+		      FROM wf_temp_transactions t
+		      -- Row numbers
+		         JOIN    (SELECT @curRow2 := 0) r
+		      JOIN wf_bp_mapping m 
+				 ON t.campaign_id = m.campaign_id 
+			  WHERE t.END_TIME > STR_TO_DATE('Wed Dec 19 00:30:00 UTC 2018', '%a %b %d %H:%i:%s UTC %Y') 
+				 AND m.datastore_name = 'ds_ds_tps_run_statistics' 
+			  ORDER BY t.END_TIME
+		) t2 on t1.row_number = t2.row_number
+	) as complete
+	ON complete.system_id=ds.system_id AND complete.start_date=ds.start_date AND complete.name= ds.name
+	SET ds.transaction_id = complete.ID;
+
+
+
+/*DECLARE before_max_id INT;
+	DECLARE after_max_id INT;
+
+	SELECT MAX(id) FROM `vbrain`.`transactions` INTO before_max_id;
+
+	DROP temporary TABLE IF EXISTS `vbrain`.`tmp`;
+	create temporary table `vbrain`.`tmp` engine=memory as
+		select b.ID as botid,
+		   temp.STATUS as status,
+		   temp.START_TIME as hit_submissionDate, 
+		   temp.END_TIME as hit_completionDate,
+		   IF(temp.STATUS = 1, 'Unkown Error', '') as exception_type,
+		   temp.DESCRIPTION as stepTitle,
+		   country.Name as country, 
+		   temp.BP_UUID as bp_instance_uuid,
+		   func.Name as function
+		from groups bp 
+		join bot b on bp.ID = b.Process_Id
+		join groups func on bp.Parent_Id = func.ID
+		join groups lob on func.Parent_Id = lob.ID
+		join groups country on lob.Parent_Id = country.ID
+		inner join wf_temp_transactions temp on temp.BP_NAME = bp.Name
+		where b.ID > 0 and b.isDisabled = 0;
+				
+				
+	INSERT INTO vbrain.transactions(WORKER_ID,STATUS,
+				START_TIME,END_TIME,EXCEPTION_TYPE,DESCRIPTION,COUNTRY,BP_UUID,B_FUNCTION,
+			    WORKER_TYPE,OUT_COME,CREATED_BY) select *, 'BOT' as WORKER_TYPE,0 as OUT_COME,'vBrain' as CREATED_BY from `vbrain`.`tmp`;
+			   
+	SELECT MAX(id) FROM `vbrain`.`transactions` INTO after_max_id;
+
+	SELECT ID FROM `vbrain`.`transactions` WHERE ID > before_max_id AND ID <= after_max_id;*/
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `t_import_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `t_import_sp`()
+BEGIN
+        DECLARE lastupdated_wf_id BIGINT(20) DEFAULT 0;
+        DECLARE max_submissionDate DATETIME DEFAULT NULL;
+        DECLARE min_submissionDate DATETIME DEFAULT NULL;        
+        DECLARE mappingIdList VARCHAR(2000) DEFAULT NULL;
+        DECLARE w VARCHAR(5000) DEFAULT NULL;
+
+        SET min_submissionDate = DATE_SUB(NOW(), INTERVAL 15 day);
+        
+        SELECT MAX(wf_id), MAX(dt) INTO lastupdated_wf_id, max_submissionDate FROM (SELECT MAX(wf_id) AS wf_id, MAX(END_TIME) AS dt FROM vbrain.wf_temp_transactions UNION ALL SELECT MAX(wf_id) AS wf_id, MAX(END_TIME) AS dt FROM vbrain.wf_temp_transactions_trash) AS t;
+
+        IF max_submissionDate IS NULL THEN
+            SET max_submissionDate = min_submissionDate;
+        END IF;
+
+        SELECT GROUP_CONCAT(bp.mapping_id SEPARATOR ',') INTO mappingIdList
+        FROM business_process_view_2 bp
+        WHERE bp.isDisabled = 0;
+
+        IF IFNULL(lastupdated_wf_id,0) = 0 THEN
+            SET w = CONCAT('AwsHit.id > (SELECT MAX(id) FROM wfdb.AwsHit WHERE submissionDate < \'',DATE(max_submissionDate),'\') AND (Run.status=\'COMPLETED\' OR Run.hasProcessingIssues = 1)');
+        ELSE
+            SET w = CONCAT('(', t_import_sub_func(min_submissionDate), ')', ' AND (Run.status=\'COMPLETED\' OR Run.hasProcessingIssues = 1)');
+        END IF;
+
+        IF mappingIdList IS NOT NULL THEN
+            SET w = CONCAT(w, ' AND Run.campaignMap_id IN (',mappingIdList,')');
+        END IF;
+
+        DROP TEMPORARY TABLE IF EXISTS `vbrain`.`t_import_tmp`;
+
+        CREATE TEMPORARY TABLE `vbrain`.`t_import_tmp` (
+            QE varchar(1000),
+            QT varchar(1)
+        );
+
+        INSERT INTO t_import_tmp(QE, QT) VALUES
+        ('Run|title|TITLE','S'),
+        ('Run|title|DESCRIPTION','S'),
+        ('AwsHit|submissionDate|START_TIME','S'),
+        ('Run|campaign_id|CAMPAIGN_ID','S'),
+        ('Run|rootRunUUID|BP_UUID','S'),
+        ('AwsHit|completionDate|END_TIME','S'),
+        ('Run|hasProcessingIssues|STATUS','S'),
+        ('AwsHit|id|wf_id','S'),
+        ('Run','F'),
+        ('AwsHit|run_id|=|Run|id','J'),
+        (w,'W'),
+        ('AwsHit|id|A','O'),
+        ('5000','L'),
+        ('wf_temp_transactions|ii','T');
+
+        SELECT * FROM t_import_tmp;
+
+        DROP TEMPORARY TABLE IF EXISTS `vbrain`.`t_import_tmp`;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `update_bp_mapping_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_bp_mapping_sp`(IN p_bp_id INT(11), IN p_mapping_id BIGINT(20), IN p_group_process_id INT(11))
+BEGIN
+	UPDATE wf_business_process SET group_process_id = p_group_process_id, mapping_id = p_mapping_id WHERE id = p_bp_id;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `update_datastore_data_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_datastore_data_sp`(IN bp CHAR(100))
+BEGIN
+
+	select 
+
+		t.bp_uuid, t.id 
+
+	from 
+
+		transactions t 
+
+	where 
+
+		t.postgres_updated is not true 
+
+		and t.worker_id = 
+
+		(select distinct b.id from groups g, bot b where lower(g.name) like lower(bp) and b.process_id = g.id limit 1);
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `update_ds_bp_uuid_sp_3` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_ds_bp_uuid_sp_3`()
+BEGIN
+    
+    UPDATE wf_temp_datastore ds JOIN 
+    (SELECT r.bp_uuid AS bp_uuid, tds.id AS tds_id FROM wf_bp_run r JOIN wf_temp_datastore tds ON tds.business_process_id = r.business_process_id WHERE tds.start_date >= (r.start_time-INTERVAL 1 SECOND) AND tds.start_date < r.end_time) run
+    ON ds.id = run.tds_id 
+    SET ds.bp_uuid = run.bp_uuid 
+    WHERE ds.bp_uuid IS NULL AND ds.business_process_id IN (15, 16, 17, 18, 20, 21);
+        
+    
+    DROP TEMPORARY TABLE IF EXISTS tmp_t_massage;
+    CREATE TEMPORARY TABLE tmp_t_massage engine=memory AS        
+    SELECT t.business_process_id AS bp_id, MIN(t.start_time) AS t_min_start_time 
+    FROM wf_bp_run t 
+    JOIN(
+        SELECT business_process_id, MIN(start_date) AS min_start_date 
+        FROM wf_temp_datastore 
+        WHERE bp_uuid IS NULL 
+        GROUP BY business_process_id
+    ) d ON d.business_process_id = t.business_process_id 
+    WHERE t.start_time > d.min_start_date 
+    GROUP BY t.business_process_id;
+
+    DROP TEMPORARY TABLE IF EXISTS tmp_d_massage;
+    CREATE TEMPORARY TABLE tmp_d_massage engine=memory AS 
+    SELECT d.business_process_id AS bp_id, MIN(d.start_date) AS d_min_start_date 
+    FROM wf_temp_datastore d 
+    JOIN (
+        SELECT business_process_id, MIN(t.start_time) AS min_start_time 
+        FROM wf_temp_transactions t 
+        JOIN business_process_view_2 bp ON bp.campaign_id = t.campaign_id 
+        GROUP BY bp.business_process_id
+    ) t ON d.business_process_id = t.business_process_id 
+    WHERE d.bp_uuid IS NULL AND d.start_date > t.min_start_time 
+    GROUP BY d.business_process_id;
+    
+    
+    SET @bp_id_d = 0;
+    SET @bp_id_t = 0;
+    
+    UPDATE wf_temp_datastore ds 
+    JOIN (
+        SELECT d.id as ds_id, t.id AS trans_id, t.BP_UUID as bp_uuid 
+        FROM (            
+            SELECT CONCAT(@row_number_d:=CASE WHEN @bp_id_d = business_process_id THEN @row_number_d + 1 ELSE 1 END,':',@bp_id_d:= business_process_id) AS map_key, id
+            FROM (
+                SELECT d.business_process_id, d.id 
+                FROM wf_temp_datastore d
+                JOIN tmp_t_massage t_md ON t_md.bp_id = d.business_process_id
+                WHERE d.bp_uuid IS NULL AND d.start_date >= (t_md.t_min_start_time - INTERVAL 1 SECOND)
+                ORDER BY d.business_process_id, d.start_date, d.system_id
+            ) ds
+        ) d
+        JOIN (
+            SELECT CONCAT(@row_number_t:=CASE WHEN @bp_id_t = business_process_id THEN @row_number_t + 1 ELSE 1 END,':',@bp_id_t:= business_process_id) AS map_key, ID, BP_UUID 
+            FROM (
+                SELECT bp.business_process_id, t.ID, t.BP_UUID 
+                FROM wf_temp_transactions t
+                JOIN business_process_view_2 bp ON t.campaign_id = bp.campaign_id 
+                JOIN tmp_d_massage d_md ON d_md.bp_id = bp.business_process_id
+                WHERE t.campaign_id IS NOT NULL AND t.start_time IS NOT NULL AND t.start_time > d_md.d_min_start_date 
+                ORDER BY t.campaign_id, t.start_time, t.wf_id
+            ) ts
+        ) t
+        ON t.map_key = d.map_key
+    ) AS map
+    ON map.ds_id = ds.ID
+    SET ds.bp_uuid = map.bp_uuid; 
+    
+    DROP TEMPORARY TABLE IF EXISTS tmp_t_massage;
+    DROP TEMPORARY TABLE IF EXISTS tmp_d_massage;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `update_lastrecord_campaign_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_lastrecord_campaign_sp`()
+BEGIN
+	DECLARE max_time DATETIME;
+	
+	SELECT GREATEST(MAX(bp_lastmodified),MAX(step_lastmodified)) INTO max_time FROM vbrain.wf_campaign;
+
+	IF max_time > (SELECT lastrecord_timestamp_campaign FROM wf_configuration) THEN
+
+		UPDATE wf_configuration SET lastrecord_timestamp_campaign = max_time;
+	END IF;
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `update_lastrecord_datastore_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_lastrecord_datastore_sp`()
+BEGIN
+	DECLARE max_time BIGINT;
+	
+	SELECT MAX(UNIX_TIMESTAMP(start_date)*100000 + system_id) INTO max_time
+			FROM wf_temp_datastore;
+
+	IF max_time > (SELECT LASTRECORD_TIMESTAMP_DATASTORE FROM wf_configuration) THEN
+		UPDATE wf_configuration SET LASTRECORD_TIMESTAMP_DATASTORE = max_time;
+	END IF;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `update_lastrecord_datastore_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_lastrecord_datastore_sp_2`()
+BEGIN
+
+	DECLARE max_time BIGINT;
+
+	
+
+	SELECT GROUP_CONCAT(t.LAST_UPDATED_TIMESTAMP SEPARATOR ',') INTO max_time
+
+		FROM wf_datastores_master m JOIN
+
+			(SELECT NAME as DS_NAME, MAX(ts) as LAST_UPDATED_TIMESTAMP FROM (
+
+			SELECT NAME, MAX(UNIX_TIMESTAMP(start_date)*100000 + system_id) as ts FROM wf_temp_datastore_trash GROUP BY name
+
+			UNION
+
+			SELECT NAME, MAX(UNIX_TIMESTAMP(start_date)*100000 + system_id) as ts FROM wf_temp_datastore GROUP BY name) AS ds GROUP BY NAME) as t
+
+			ON m.display_name = t.DS_NAME 
+
+		ORDER BY m.query_order;
+
+	
+
+	UPDATE wf_configuration SET LASTRECORD_TIMESTAMP_DATASTORE = max_time;
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `update_lastrecord_transaction_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_lastrecord_transaction_sp`()
+BEGIN
+	DECLARE max_time DATETIME;
+	
+	SELECT MAX(START_TIME) INTO max_time FROM vbrain.wf_temp_transactions;
+
+	IF max_time > (SELECT LASTRECORD_TIMESTAMP FROM wf_configuration) THEN
+
+		UPDATE wf_configuration SET LASTRECORD_TIMESTAMP = max_time;
+	END IF;
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `update_transactions_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_transactions_sp`()
+BEGIN
+	
+    DECLARE v_start_date varchar(100);
+    DECLARE v_name varchar(100);
+   	DECLARE max_length INTEGER DEFAULT 0;
+    DECLARE finished INTEGER DEFAULT 0;
+   
+    DECLARE datastore_cursor CURSOR FOR 
+   		SELECT DISTINCT start_date, name FROM wf_temp_datastore WHERE transaction_id IS NULL ORDER BY start_date;
+      	
+   	-- declare NOT FOUND handler
+ 	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finished = 1;
+ 
+ 	DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+	    ROLLBACK;  -- Rollback any changes made in the transaction
+        RESIGNAL;  -- Resignal the error to the caller
+    END;
+   
+ 	OPEN datastore_cursor;
+ 	
+ 	-- Loop through different runs data and link transactions dump with datastore dump
+ 	-- Update 'ds.transaction_id' (foreign key)
+ 	get_datastore_data: LOOP
+ 		FETCH datastore_cursor INTO v_start_date,v_name;
+	 	IF finished = 1 THEN 
+			LEAVE get_datastore_data;
+		END IF;
+ 		UPDATE wf_temp_datastore ds 
+			JOIN (
+				SELECT t2.ID AS trans_id, t1.ID AS ds_id
+				FROM (
+					-- Select wf_temp_datastore rows with row numbers
+					SELECT tds.ID, @curRow := @curRow + 1 AS row_number
+				      FROM wf_temp_datastore tds
+				         JOIN
+				         	(SELECT @curRow := 0) r -- Row numbers
+				         WHERE tds.start_date = v_start_date AND tds.name = v_name ORDER BY tds.system_id) t1
+				JOIN (
+					-- Select ids from temp transactions with row numbers
+				 	SELECT tt.ID, @curRow2 := @curRow2 + 1 AS row_number
+				      FROM wf_temp_transactions tt
+				         JOIN
+				         	(SELECT @curRow2 := 0) r -- Row numbers
+				      JOIN wf_bp_mapping m 
+						 ON tt.campaign_id = m.campaign_id 
+					  WHERE tt.END_TIME > v_start_date 
+						 AND m.datastore_name = v_name 
+					  ORDER BY tt.END_TIME
+				) t2 ON t1.row_number = t2.row_number
+			) AS temp
+			ON temp.ds_id = ds.ID
+			SET ds.transaction_id = temp.trans_id;
+ 	END LOOP get_datastore_data;
+ 
+ 	CLOSE datastore_cursor;
+
+ 	-- Update error cat for wf_temp_datastore data
+ 	UPDATE vbrain.wf_temp_datastore ds
+	JOIN (
+		SELECT
+			ds.ID ID,
+			e.Exception_type e_type
+		FROM vbrain.wf_temp_datastore ds
+		JOIN vbrain.exceptions e ON
+			ds.error_msg LIKE concat('%', e.Exception_Value, '%')
+		JOIN vbrain.business_process_view bp ON
+			bp.lob_id = e.Lob
+		WHERE
+			bp.datastore_name = ds.name) te 
+		ON ds.ID = te.ID 
+	SET ds.ERROR_CAT = te.e_type
+	WHERE ds.ERROR_CAT IS NULL;
+ 
+	SELECT CHARACTER_MAXIMUM_LENGTH INTO max_length
+	FROM information_schema.columns
+	WHERE table_schema = 'vbrain' AND   
+	      table_name = 'transactions' AND
+	      COLUMN_NAME = 'ERROR_TYPE';
+
+	-- Select from the dumps, groups, bot in temporary in mamory table
+	DROP TEMPORARY TABLE IF EXISTS `vbrain`.`tmp`;
+	CREATE TEMPORARY TABLE `vbrain`.`tmp` engine=memory AS	
+	SELECT tt.ID AS transaction_id,
+		   b.ID AS botid,
+		   tt.STATUS AS status,
+		   tt.START_TIME AS hit_submissionDate, 
+		   tt.END_TIME AS hit_completionDate,
+		   IF(tt.STATUS = 1, 'Unkown Error', '') AS exception_type,
+		   tt.DESCRIPTION AS stepTitle,
+		   bp.country AS country, 
+		   tt.BP_UUID AS bp_instance_uuid,
+		   bp.function AS function,
+		   ds.error_cat AS error_cat,
+		   ds.error_msg AS error_msg,
+		   ds.tracking_id AS tracking_id,
+		   'BOT' AS WORKER_TYPE,
+		   0 AS OUT_COME,
+		   'vBrain' AS CREATED_BY
+		FROM business_process_view bp 
+		JOIN bot b ON bp.process_id = b.Process_Id
+		INNER JOIN wf_temp_transactions tt ON tt.campaign_id = bp.campaign_id
+		JOIN wf_temp_datastore ds ON ds.transaction_id = tt.ID
+		WHERE b.ID > 0 AND b.isDisabled = 0;
+   
+	SET autocommit = 0;
+
+	-- Start SQL transaction
+	START TRANSACTION;
+	-- Promote to transactions from in memory temporary table
+ 	INSERT INTO transactions (WORKER_ID,STATUS,
+				START_TIME,END_TIME,EXCEPTION_TYPE,DESCRIPTION,COUNTRY,BP_UUID,B_FUNCTION,
+				ERROR_CAT, ERROR_TYPE,TRACKING_ID,WORKER_TYPE,OUT_COME,CREATED_BY)
+ 	SELECT botid, status, hit_submissionDate, hit_completionDate, exception_type,
+		   stepTitle, country, bp_instance_uuid, function, error_cat,
+		   SUBSTRING(error_msg, 1, max_length), tracking_id, WORKER_TYPE, OUT_COME, CREATED_BY
+		FROM `vbrain`.`tmp`;
+	
+	-- Delete (Move to trash) successfully promoted (moved to transactions table) rows 
+	-- from temp tables (wf_temp_transactions, wf_temp_datastore)
+	INSERT INTO wf_temp_transactions_trash (ID, STATUS, TITLE, BP_NAME, START_TIME, END_TIME, DESCRIPTION, BP_UUID, campaign_id) 
+		SELECT ID, STATUS, TITLE, BP_NAME, START_TIME, END_TIME, DESCRIPTION, BP_UUID, campaign_id FROM wf_temp_transactions 
+		WHERE ID IN (SELECT transaction_id FROM tmp);
+	
+	INSERT INTO wf_temp_datastore_trash (ID, name, transaction_id, error_cat, start_date, system_id, error_msg, tracking_id) 
+		SELECT ID, name, transaction_id, error_cat, start_date, system_id, error_msg, tracking_id FROM wf_temp_datastore 
+		WHERE transaction_id IN (SELECT transaction_id FROM tmp);
+	
+	DELETE FROM wf_temp_datastore WHERE transaction_id IN (SELECT transaction_id FROM tmp);
+	DELETE FROM wf_temp_transactions WHERE ID IN (SELECT transaction_id FROM tmp);
+	
+	COMMIT;
+	-- End SQL transaction 
+	SET autocommit = 1;
+
+	DROP TEMPORARY TABLE IF EXISTS `vbrain`.`tmp`;
+ 
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `update_transactions_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_transactions_sp_2`()
+BEGIN
+    DECLARE v_start_date varchar(100);
+    DECLARE v_bp_id varchar(100);
+    DECLARE max_length INTEGER DEFAULT 0;
+    DECLARE track_id_max_length INTEGER DEFAULT 0;
+    DECLARE finished INTEGER DEFAULT 0;
+    DECLARE datastore_cursor CURSOR FOR 
+        SELECT DISTINCT start_date, business_process_id FROM wf_temp_datastore WHERE bp_uuid IS NULL AND transaction_id IS NULL ORDER BY start_date;
+              
+    
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET finished = 1;
+ 
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;  
+        RESIGNAL;  
+    END;
+   
+    UPDATE wf_temp_datastore ds 
+    JOIN (
+        SELECT t.id AS trans_id, d.id as ds_id FROM
+        (SELECT CONCAT(@row_number:=CASE WHEN @bp_uuid = bp_uuid THEN @row_number + 1 ELSE 1 END,':',@bp_uuid:=bp_uuid) as map_key, id FROM wf_temp_datastore WHERE bp_uuid IS NOT NULL ORDER BY bp_uuid, system_id) d
+        JOIN
+        (SELECT CONCAT(@row_number:=CASE WHEN @BP_UUID = BP_UUID THEN @row_number + 1 ELSE 1 END,':',@BP_UUID:=BP_UUID) as map_key, ID FROM wf_temp_transactions WHERE BP_UUID IS NOT NULL ORDER BY BP_UUID, wf_id) t
+        ON t.map_key = d.map_key
+    ) AS map
+    ON map.ds_id = ds.ID
+    SET ds.transaction_id = map.trans_id;
+
+    OPEN datastore_cursor;
+     
+    
+    
+    get_datastore_data: LOOP
+        FETCH datastore_cursor INTO v_start_date,v_bp_id;
+        IF finished = 1 THEN 
+            LEAVE get_datastore_data;
+        END IF;
+        UPDATE wf_temp_datastore ds 
+        JOIN (
+            SELECT t2.ID AS trans_id, t1.ID AS ds_id
+            FROM (
+                
+                SELECT tds.ID, @curRow := @curRow + 1 AS row_number
+                FROM wf_temp_datastore tds
+                JOIN
+                    (SELECT @curRow := 0) r 
+                WHERE tds.start_date = v_start_date AND tds.business_process_id = v_bp_id ORDER BY tds.system_id
+            ) t1
+            JOIN (
+                
+                SELECT tt.ID, @curRow2 := @curRow2 + 1 AS row_number
+                FROM wf_temp_transactions tt
+                JOIN
+                    (SELECT @curRow2 := 0) r 
+                JOIN business_process_view_2 bp 
+                    ON tt.campaign_id = bp.campaign_id 
+                WHERE tt.END_TIME > v_start_date 
+                    AND bp.business_process_id = v_bp_id 
+                ORDER BY tt.END_TIME
+            ) t2 ON t1.row_number = t2.row_number
+        ) AS temp
+        ON temp.ds_id = ds.ID
+        SET ds.transaction_id = temp.trans_id;
+    END LOOP get_datastore_data;
+
+    CLOSE datastore_cursor;
+
+    SELECT CHARACTER_MAXIMUM_LENGTH INTO max_length
+    FROM information_schema.columns
+    WHERE table_schema = 'vbrain' AND   
+        table_name = 'transactions' AND
+        COLUMN_NAME = 'ERROR_TYPE';
+
+    SELECT CHARACTER_MAXIMUM_LENGTH INTO track_id_max_length
+    FROM information_schema.columns
+    WHERE table_schema = 'vbrain' AND   
+        table_name = 'transactions' AND
+        COLUMN_NAME = 'TRACKING_ID';
+
+    
+    DROP TEMPORARY TABLE IF EXISTS `vbrain`.`tmp`;
+    CREATE TEMPORARY TABLE `vbrain`.`tmp` engine=memory AS        
+    SELECT tt.ID AS transaction_id,
+           b.ID AS botid,
+           tt.STATUS AS status,
+           tt.START_TIME AS hit_submissionDate, 
+           IF(ds.process_time IS NOT NULL, FROM_UNIXTIME(UNIX_TIMESTAMP(tt.START_TIME) + ds.process_time/1000), tt.END_TIME) AS hit_completionDate,
+           IF(tt.STATUS = 1, 'Unkown Error', '') AS exception_type,
+           tt.DESCRIPTION AS stepTitle,
+           bp.country AS country, 
+           tt.BP_UUID AS bp_instance_uuid,
+           bp.function AS function,
+           ds.error_cat AS error_cat,
+           ds.error_msg AS error_msg,
+           ds.tracking_id AS tracking_id,
+           'BOT' AS WORKER_TYPE,
+           0 AS OUT_COME,
+           'vBrain' AS CREATED_BY
+    FROM business_process_view_2 bp 
+    JOIN bot b ON bp.bp_group_id = b.Process_Id
+    INNER JOIN wf_temp_transactions tt ON tt.campaign_id = bp.campaign_id
+    JOIN wf_temp_datastore ds ON ds.transaction_id = tt.ID
+    WHERE b.ID > 0 AND b.isDisabled = 0
+    LIMIT 2000;
+
+    INSERT INTO `vbrain`.`tmp`
+    SELECT tt.ID AS transaction_id,
+           b.ID AS botid,
+           tt.STATUS AS status,
+           tt.START_TIME AS hit_submissionDate, 
+           tt.END_TIME AS hit_completionDate,
+           IF(tt.STATUS = 1, 'Unkown Error', '') AS exception_type,
+           tt.DESCRIPTION AS stepTitle,
+           bp.country AS country, 
+           tt.BP_UUID AS bp_instance_uuid,
+           bp.function AS function,
+           1 AS error_cat,
+           'This task has processing issues.' AS error_msg,
+           '-' AS tracking_id,
+           'BOT' AS WORKER_TYPE,
+           0 AS OUT_COME,
+           'vBrain' AS CREATED_BY
+    FROM business_process_view_2 bp 
+    JOIN bot b ON bp.bp_group_id = b.Process_Id
+    INNER JOIN wf_temp_transactions tt ON tt.campaign_id = bp.campaign_id
+    WHERE b.ID > 0 AND b.isDisabled = 0 
+    AND tt.END_TIME IS NULL AND tt.STATUS = 1;
+
+
+    SET autocommit = 0;
+
+    
+    START TRANSACTION;
+    
+    INSERT INTO transactions (WORKER_ID,STATUS,START_TIME,END_TIME,EXCEPTION_TYPE,DESCRIPTION,COUNTRY,BP_UUID,B_FUNCTION,ERROR_CAT, ERROR_TYPE,TRACKING_ID,WORKER_TYPE,OUT_COME,CREATED_BY)
+    SELECT botid, status, hit_submissionDate, hit_completionDate, exception_type,stepTitle, country, bp_instance_uuid, function,error_cat,SUBSTRING(error_msg, 1, max_length), SUBSTRING(tracking_id, 1, track_id_max_length), WORKER_TYPE, OUT_COME, CREATED_BY
+    FROM `vbrain`.`tmp`;
+    
+    
+    
+    INSERT INTO wf_temp_transactions_trash (ID, STATUS, TITLE, BP_NAME, START_TIME, END_TIME, DESCRIPTION, BP_UUID, campaign_id, WF_ID) 
+        SELECT ID, STATUS, TITLE, BP_NAME, START_TIME, END_TIME, DESCRIPTION, BP_UUID, campaign_id, WF_ID FROM wf_temp_transactions 
+        WHERE ID IN (SELECT transaction_id FROM tmp);
+    
+    INSERT INTO wf_temp_datastore_trash (ID, name, transaction_id, error_cat, start_date, system_id, error_msg, tracking_id, business_process_id, wf_id, bp_uuid, end_date, process_time) 
+        SELECT ID, name, transaction_id, error_cat, start_date, system_id, error_msg, tracking_id, business_process_id, wf_id, bp_uuid, end_date, process_time FROM wf_temp_datastore 
+        WHERE transaction_id IN (SELECT transaction_id FROM tmp);
+    
+    DELETE FROM wf_temp_datastore WHERE transaction_id IN (SELECT transaction_id FROM tmp);
+    DELETE FROM wf_temp_transactions WHERE ID IN (SELECT transaction_id FROM tmp);
+    
+    COMMIT;
+    
+    SET autocommit = 1;
+
+    DROP TEMPORARY TABLE IF EXISTS `vbrain`.`tmp`;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `update_trans_copy_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_trans_copy_sp`()
+BEGIN
+
+	
+
+    DECLARE v_start_date varchar(100);
+
+    DECLARE v_name varchar(100);
+
+   	DECLARE max_length INTEGER DEFAULT 0;
+
+    DECLARE finished INTEGER DEFAULT 0;
+
+   
+
+    DECLARE datastore_cursor CURSOR FOR 
+
+   		SELECT DISTINCT start_date, name FROM wf_temp_datastore WHERE transaction_id IS NULL ORDER BY start_date;
+
+      	
+
+   	-- declare NOT FOUND handler
+
+ 	DECLARE CONTINUE HANDLER FOR NOT FOUND SET finished = 1;
+
+ 
+
+ 	DECLARE EXIT HANDLER FOR SQLEXCEPTION
+
+    BEGIN
+
+	    ROLLBACK;  -- Rollback any changes made in the transaction
+
+        RESIGNAL;  -- Resignal the error to the caller
+
+    END;
+
+   
+
+ 	OPEN datastore_cursor;
+
+ 	
+
+ 	-- Loop through different runs data and link transactions dump with datastore dump
+
+ 	-- Update 'ds.transaction_id' (foreign key)
+
+ 	get_datastore_data: LOOP
+
+ 		FETCH datastore_cursor INTO v_start_date,v_name;
+
+	 	IF finished = 1 THEN 
+
+			LEAVE get_datastore_data;
+
+		END IF;
+
+ 		UPDATE wf_temp_datastore ds 
+
+			JOIN (
+
+				SELECT t2.ID AS trans_id, t1.ID AS ds_id
+
+				FROM (
+
+					-- Select wf_temp_datastore rows with row numbers
+
+					SELECT tds.ID, @curRow := @curRow + 1 AS row_number
+
+				      FROM wf_temp_datastore tds
+
+				         JOIN
+
+				         	(SELECT @curRow := 0) r -- Row numbers
+
+				         WHERE tds.start_date = v_start_date AND tds.name = v_name ORDER BY tds.system_id) t1
+
+				JOIN (
+
+					-- Select ids from temp transactions with row numbers
+
+				 	SELECT tt.ID, @curRow2 := @curRow2 + 1 AS row_number
+
+				      FROM wf_temp_transactions tt
+
+				         JOIN
+
+				         	(SELECT @curRow2 := 0) r -- Row numbers
+
+				      JOIN wf_bp_mapping m 
+
+						 ON tt.campaign_id = m.campaign_id 
+
+					  WHERE tt.END_TIME > v_start_date 
+
+						 AND m.datastore_name = v_name 
+
+					  ORDER BY tt.END_TIME
+
+				) t2 ON t1.row_number = t2.row_number
+
+			) AS temp
+
+			ON temp.ds_id = ds.ID
+
+			SET ds.transaction_id = temp.trans_id;
+
+ 	END LOOP get_datastore_data;
+
+ 
+
+ 	CLOSE datastore_cursor;
+
+
+
+ 	-- Update error cat for wf_temp_datastore data
+
+ 	UPDATE vbrain.wf_temp_datastore ds
+
+	JOIN (
+
+		SELECT
+
+			ds.ID ID,
+
+			e.Exception_type e_type
+
+		FROM vbrain.wf_temp_datastore ds
+
+		JOIN vbrain.exceptions e ON
+
+			ds.error_msg LIKE concat('%', e.Exception_Value, '%')
+
+		JOIN vbrain.business_process_view bp ON
+
+			bp.lob_id = e.Lob
+
+		WHERE
+
+			bp.datastore_name = ds.name) te 
+
+		ON ds.ID = te.ID 
+
+	SET ds.ERROR_CAT = te.e_type
+
+	WHERE ds.ERROR_CAT IS NULL;
+
+ 
+
+	SELECT CHARACTER_MAXIMUM_LENGTH INTO max_length
+
+	FROM information_schema.columns
+
+	WHERE table_schema = 'vbrain' AND   
+
+	      table_name = 'transactions' AND
+
+	      COLUMN_NAME = 'ERROR_TYPE';
+
+
+
+	-- Select from the dumps, groups, bot in temporary in mamory table
+
+	DROP TEMPORARY TABLE IF EXISTS `vbrain`.`tmp`;
+
+	CREATE TEMPORARY TABLE `vbrain`.`tmp` engine=memory AS	
+
+	SELECT tt.ID AS transaction_id,
+
+		   b.ID AS botid,
+
+		   tt.STATUS AS status,
+
+		   tt.START_TIME AS hit_submissionDate, 
+
+		   tt.END_TIME AS hit_completionDate,
+
+		   IF(tt.STATUS = 1, 'Unkown Error', '') AS exception_type,
+
+		   tt.DESCRIPTION AS stepTitle,
+
+		   bp.country AS country, 
+
+		   tt.BP_UUID AS bp_instance_uuid,
+
+		   bp.function AS function,
+
+		   ds.error_cat AS error_cat,
+
+		   ds.error_msg AS error_msg,
+
+		   ds.tracking_id AS tracking_id,
+
+		   'BOT' AS WORKER_TYPE,
+
+		   0 AS OUT_COME,
+
+		   'vBrain' AS CREATED_BY
+
+		FROM business_process_view bp 
+
+		JOIN bot b ON bp.process_id = b.Process_Id
+
+		INNER JOIN wf_temp_transactions tt ON tt.campaign_id = bp.campaign_id
+
+		JOIN wf_temp_datastore ds ON ds.transaction_id = tt.ID
+
+		WHERE b.ID > 0 AND b.isDisabled = 0;
+
+   
+
+	SET autocommit = 0;
+
+
+
+	-- Start SQL transaction
+
+	START TRANSACTION;
+
+	-- Promote to transactions from in memory temporary table
+
+ 	INSERT INTO transactions (WORKER_ID,STATUS,
+
+				START_TIME,END_TIME,EXCEPTION_TYPE,DESCRIPTION,COUNTRY,BP_UUID,B_FUNCTION,
+
+				ERROR_CAT, ERROR_TYPE,TRACKING_ID,WORKER_TYPE,OUT_COME,CREATED_BY)
+
+ 	SELECT botid, status, hit_submissionDate, hit_completionDate, exception_type,
+
+		   stepTitle, country, bp_instance_uuid, function, error_cat,
+
+		   SUBSTRING(error_msg, 1, max_length), tracking_id, WORKER_TYPE, OUT_COME, CREATED_BY
+
+		FROM `vbrain`.`tmp`;
+
+	
+
+	-- Delete (Move to trash) successfully promoted (moved to transactions table) rows 
+
+	-- from temp tables (wf_temp_transactions, wf_temp_datastore)
+
+	INSERT INTO wf_temp_transactions_trash (ID, STATUS, TITLE, BP_NAME, START_TIME, END_TIME, DESCRIPTION, BP_UUID, campaign_id) 
+
+		SELECT ID, STATUS, TITLE, BP_NAME, START_TIME, END_TIME, DESCRIPTION, BP_UUID, campaign_id FROM wf_temp_transactions 
+
+		WHERE ID IN (SELECT transaction_id FROM tmp);
+
+	
+
+	INSERT INTO wf_temp_datastore_trash (ID, name, transaction_id, error_cat, start_date, system_id, error_msg, tracking_id) 
+
+		SELECT ID, name, transaction_id, error_cat, start_date, system_id, error_msg, tracking_id FROM wf_temp_datastore 
+
+		WHERE transaction_id IN (SELECT transaction_id FROM tmp);
+
+	
+
+	DELETE FROM wf_temp_datastore WHERE transaction_id IN (SELECT transaction_id FROM tmp);
+
+	DELETE FROM wf_temp_transactions WHERE ID IN (SELECT transaction_id FROM tmp);
+
+	
+
+	COMMIT;
+
+	-- End SQL transaction 
+
+	SET autocommit = 1;
+
+
+
+	DROP TEMPORARY TABLE IF EXISTS `vbrain`.`tmp`;
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `wf_campaign_massage_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8 */ ;
+/*!50003 SET character_set_results = utf8 */ ;
+/*!50003 SET collation_connection  = utf8_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `wf_campaign_massage_sp`()
+BEGIN
+	INSERT INTO wf_campaign (mapping_id,campaign_id,step_id,
+		bp_name,step_title,deleted,
+		step_index,bp_lastmodified,step_lastmodified)
+
+	SELECT mapping_id,campaign_id,step_id,
+		bp_name,step_title,deleted,
+		step_index,bp_lastmodified,step_lastmodified 
+	FROM wf_campaign_temp t
+
+	ON DUPLICATE KEY UPDATE 
+		bp_name=t.bp_name, step_title=t.step_title, 
+		deleted=t.deleted, step_index=t.step_index,
+		bp_lastmodified=t.bp_lastmodified, step_lastmodified=t.step_lastmodified;
+
+
+
+	DELETE FROM wf_campaign_temp;
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `wf_query_sp_2` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `wf_query_sp_2`(IN params VARCHAR(1000))
+BEGIN
+    DECLARE t VARCHAR(100);
+    DECLARE value VARCHAR(1000);
+    DECLARE o VARCHAR(100) DEFAULT NULL;
+    DECLARE w VARCHAR(1000) DEFAULT NULL;
+    DECLARE front TEXT DEFAULT NULL;
+    DECLARE frontlen INT DEFAULT NULL;
+    DECLARE TempValue TEXT DEFAULT NULL;
+
+    SET t = SPLIT_STR(params,'$^',1);
+    SET value = SPLIT_STR(params,'$^',2);
+    SET o = SPLIT_STR(params,'$^',3);
+    SET w = SPLIT_STR(params,'$^',4);
+
+    DROP TEMPORARY TABLE IF EXISTS `vbrain`.`wf_query_tmp`;
+
+    CREATE TEMPORARY TABLE `vbrain`.`wf_query_tmp` (
+        QE varchar(1000),
+        QT varchar(1)
+    ); 
+
+    iterator: LOOP
+        IF LENGTH(TRIM(value)) = 0 OR value IS NULL THEN
+            LEAVE iterator;
+        END IF;
+        SET front = SUBSTRING_INDEX(Value,'$$',1);
+        SET frontlen = LENGTH(front);
+        SET TempValue = TRIM(front);
+
+        IF SPLIT_STR(TempValue,'$=',2) IS NULL THEN
+            INSERT INTO wf_query_tmp(QE, QT) VALUES 
+            (CONCAT('|',TempValue,'|',TempValue),'S');
+        ELSE
+            INSERT INTO wf_query_tmp(QE, QT) VALUES 
+            (CONCAT('|',SPLIT_STR(TempValue,'$=',1),'|',SPLIT_STR(TempValue,'$=',2)),'S');
+        END IF;
+
+        SET value = INSERT(value,1,frontlen + 2,'');
+    END LOOP;
+
+    INSERT INTO wf_query_tmp(QE, QT) VALUES 
+    (t,'F');
+
+    IF w IS NOT NULL THEN
+        INSERT INTO wf_query_tmp(QE, QT) VALUES 
+        (w,'W');
+    END IF;
+    
+    IF o IS NOT NULL THEN
+        SET value = o;
+
+        iterator: LOOP
+            IF LENGTH(TRIM(value)) = 0 OR value IS NULL THEN
+                LEAVE iterator;
+            END IF;
+            SET front = SUBSTRING_INDEX(Value,'$$',1);
+            SET frontlen = LENGTH(front);
+            SET TempValue = TRIM(front);
+
+            INSERT INTO wf_query_tmp(QE, QT) VALUES 
+            (CONCAT('|',SPLIT_STR(TempValue,'$#',1),'|',IFNULL(SPLIT_STR(TempValue,'$#',2),'A')),'O');
+
+            SET value = INSERT(value,1,frontlen + 2,'');
+        END LOOP;
+    END IF;
+
+    INSERT INTO wf_query_tmp(QE, QT) VALUES 
+    ('500','L');
+    
+    SELECT * FROM wf_query_tmp;
+
+    DROP TEMPORARY TABLE IF EXISTS `vbrain`.`wf_query_tmp`;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `wf_temp_datastore_massage_sp` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = cp850 */ ;
+/*!50003 SET character_set_results = cp850 */ ;
+/*!50003 SET collation_connection  = cp850_general_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `wf_temp_datastore_massage_sp`()
+BEGIN
+        DECLARE v_bp_id INT(11);
+        DECLARE v_convert_format VARCHAR(50);
+
+        DECLARE finished INT(1) DEFAULT 0;
+
+        DECLARE datastore_cursor CURSOR FOR
+                SELECT business_process_id, start_date_convert_format FROM business_process_view_2 WHERE isDisabled = 0;
+
+
+        DECLARE CONTINUE HANDLER FOR NOT FOUND SET finished = 1;
+
+        OPEN datastore_cursor;
+
+        update_datastore_fields: LOOP
+                FETCH datastore_cursor INTO v_bp_id, v_convert_format;
+                IF finished = 1 THEN
+                        LEAVE update_datastore_fields;
+                END IF;
+
+                
+                
+            
+                
+                UPDATE wf_temp_datastore SET start_date = STR_TO_DATE(start_date, v_convert_format) WHERE wf_id = 0 AND business_process_id = v_bp_id;
+                
+                UPDATE wf_temp_datastore SET wf_id = UNIX_TIMESTAMP(start_date)*100000 + system_id WHERE wf_id = 0 AND business_process_id = v_bp_id;
+
+        END LOOP update_datastore_fields;
+
+        CLOSE datastore_cursor;
+		
+		
+		UPDATE wf_temp_datastore SET process_time = (UNIX_TIMESTAMP(end_date) - UNIX_TIMESTAMP(start_date))*1000 WHERE end_date IS NOT NULL AND process_time IS NULL;
+
+        
+        UPDATE vbrain.wf_temp_datastore ds
+        JOIN (SELECT bp.business_process_id, Exception_Type, Exception_Value
+                  FROM vbrain.exceptions e
+                  JOIN vbrain.business_process_view_2 bp ON bp.lob_id = e.Lob) te
+        ON ds.business_process_id = te.business_process_id
+        SET ds.ERROR_CAT = te.Exception_Type
+        WHERE ds.ERROR_CAT IS NULL AND ds.error_msg LIKE concat('%', te.Exception_Value, '%');
+        
+        
+        CALL update_ds_bp_uuid_sp_3();
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+
+--
+-- Final view structure for view `business_process_bot_view_2`
+--
+
+/*!50001 DROP VIEW IF EXISTS `business_process_bot_view_2`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = cp850 */;
+/*!50001 SET character_set_results     = cp850 */;
+/*!50001 SET collation_connection      = cp850_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `business_process_bot_view_2` AS select `bp`.`business_process_id` AS `business_process_id`,`bp`.`display_name` AS `display_name`,`bp`.`bp_group_name` AS `bp_group_name`,`bp`.`campaign_name` AS `campaign_name`,`bp`.`function` AS `function`,`bp`.`lob` AS `lob`,`bp`.`country` AS `country`,`bp`.`region` AS `region`,`bp`.`campaign_id` AS `campaign_id`,`bp`.`mapping_id` AS `mapping_id`,`bp`.`bp_group_id` AS `bp_group_id`,`bp`.`function_id` AS `function_id`,`bp`.`lob_id` AS `lob_id`,`bp`.`country_id` AS `country_id`,`bp`.`region_id` AS `region_id`,`bp`.`mapped_datastores` AS `mapped_datastores`,`bp`.`query_order` AS `query_order`,`bp`.`start_date_convert_format` AS `start_date_convert_format`,`bp`.`start_date_postgre_format` AS `start_date_postgre_format`,`bp`.`tracking_id_field` AS `tracking_id_field`,`bp`.`error_msg_field` AS `error_msg_field`,`bp`.`system_id_field` AS `system_id_field`,`bp`.`start_date_field` AS `start_date_field`,`bp`.`isDisabled` AS `isDisabled`,`b`.`ID` AS `BOT_ID`,`b`.`isDisabled` AS `BOT_DISABLED` from (`business_process_view_2` `bp` join `bot` `b` on((`b`.`Process_Id` = `bp`.`bp_group_id`))) */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `business_process_view`
+--
+
+/*!50001 DROP VIEW IF EXISTS `business_process_view`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = cp850 */;
+/*!50001 SET character_set_results     = cp850 */;
+/*!50001 SET collation_connection      = cp850_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `business_process_view` AS select `bp`.`ID` AS `process_id`,`bp`.`Name` AS `process_name`,`func`.`Name` AS `function`,`lob`.`ID` AS `lob_id`,`lob`.`Name` AS `lob`,`country`.`Name` AS `country`,`mp`.`datastore_name` AS `datastore_name`,`mp`.`campaign_id` AS `campaign_id` from ((((`groups` `bp` join `groups` `func` on((`bp`.`Parent_Id` = `func`.`ID`))) join `groups` `lob` on((`func`.`Parent_Id` = `lob`.`ID`))) join `groups` `country` on((`lob`.`Parent_Id` = `country`.`ID`))) join `wf_bp_mapping` `mp` on((`bp`.`ID` = `mp`.`process_id`))) where (`bp`.`Type` = 'process') */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `business_process_view_2`
+--
+
+/*!50001 DROP VIEW IF EXISTS `business_process_view_2`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = cp850 */;
+/*!50001 SET character_set_results     = cp850 */;
+/*!50001 SET collation_connection      = cp850_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `business_process_view_2` AS select `bp`.`id` AS `business_process_id`,`bp`.`display_name` AS `display_name`,`gp`.`Name` AS `bp_group_name`,`cmp`.`bp_name` AS `campaign_name`,`func`.`Name` AS `function`,`lob`.`Name` AS `lob`,`country`.`Name` AS `country`,`region`.`Name` AS `region`,`cmp`.`campaign_id` AS `campaign_id`,`bp`.`mapping_id` AS `mapping_id`,`gp`.`ID` AS `bp_group_id`,`func`.`ID` AS `function_id`,`lob`.`ID` AS `lob_id`,`country`.`ID` AS `country_id`,`region`.`ID` AS `region_id`,`bp`.`mapped_datastores` AS `mapped_datastores`,`bp`.`query_order` AS `query_order`,`bp`.`start_date_convert_format` AS `start_date_convert_format`,`bp`.`start_date_postgre_format` AS `start_date_postgre_format`,`bp`.`tracking_id_field` AS `tracking_id_field`,`bp`.`error_msg_field` AS `error_msg_field`,`bp`.`system_id_field` AS `system_id_field`,`bp`.`start_date_field` AS `start_date_field`,`gp`.`isDisabled` AS `isDisabled` from ((((((`groups` `gp` join `groups` `func` on((`gp`.`Parent_Id` = `func`.`ID`))) join `groups` `lob` on((`func`.`Parent_Id` = `lob`.`ID`))) join `groups` `country` on((`lob`.`Parent_Id` = `country`.`ID`))) join `groups` `region` on((`country`.`Parent_Id` = `region`.`ID`))) join `wf_business_process` `bp` on((`gp`.`ID` = `bp`.`group_process_id`))) join `wf_campaign` `cmp` on((`bp`.`mapping_id` = `cmp`.`mapping_id`))) where (`gp`.`Type` = 'process') */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `group_bot_view`
+--
+
+/*!50001 DROP VIEW IF EXISTS `group_bot_view`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8 */;
+/*!50001 SET character_set_results     = utf8 */;
+/*!50001 SET collation_connection      = utf8_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `group_bot_view` AS select `b`.`ID` AS `id`,`b`.`Bot_Key` AS `botKey`,`b`.`Provider` AS `provider`,`b`.`Description` AS `description`,`b`.`Process_Id` AS `processId`,`b`.`status` AS `status`,`g`.`Name` AS `processName` from (`bot` `b` join `groups` `g`) where ((`g`.`ID` = `b`.`Process_Id`) and (`b`.`isDisabled` = '0')) */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `group_hierarchy_view`
+--
+
+/*!50001 DROP VIEW IF EXISTS `group_hierarchy_view`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8 */;
+/*!50001 SET character_set_results     = utf8 */;
+/*!50001 SET collation_connection      = utf8_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `group_hierarchy_view` AS select `bp`.`ID` AS `process_id`,`bp`.`Name` AS `process_name`,`func`.`Name` AS `function`,`lob`.`ID` AS `lob_id`,`lob`.`Name` AS `lob`,`country`.`Name` AS `country` from (((`groups` `bp` join `groups` `func` on((`bp`.`Parent_Id` = `func`.`ID`))) join `groups` `lob` on((`func`.`Parent_Id` = `lob`.`ID`))) join `groups` `country` on((`lob`.`Parent_Id` = `country`.`ID`))) where (`bp`.`Type` = 'process') */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `group_incidents_view`
+--
+
+/*!50001 DROP VIEW IF EXISTS `group_incidents_view`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8 */;
+/*!50001 SET character_set_results     = utf8 */;
+/*!50001 SET collation_connection      = utf8_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `group_incidents_view` AS select `vi`.`TICKET_ID` AS `ticket_id`,`vi`.`STATUS` AS `status`,`vt`.`ID` AS `transaction_id`,(case when (`vt`.`WORKER_TYPE` = 'BOT') then (select `bot`.`Process_Id` from `bot` where ((`bot`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'BOT'))) else (select `human_worker`.`Process_Id` from `human_worker` where ((`human_worker`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'HUMAN'))) end) AS `process_id`,(case when (`vt`.`WORKER_TYPE` = 'BOT') then (select `groups`.`Name` from `groups` where (`groups`.`ID` = (select `bot`.`Process_Id` from `bot` where ((`bot`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'BOT'))))) else (select `groups`.`Name` from `groups` where (`groups`.`ID` = (select `human_worker`.`Process_Id` from `human_worker` where ((`human_worker`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'HUMAN'))))) end) AS `process_name`,`vt`.`START_TIME` AS `start_time`,`vt`.`END_TIME` AS `end_time`,`vt`.`COUNTRY` AS `country` from (`vbrain_incidents` `vi` join `transactions` `vt`) where (`vt`.`ID` = `vi`.`TRANSACTION_ID`) */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `group_sla_view`
+--
+
+/*!50001 DROP VIEW IF EXISTS `group_sla_view`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8 */;
+/*!50001 SET character_set_results     = utf8 */;
+/*!50001 SET collation_connection      = utf8_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `group_sla_view` AS select `vt`.`ID` AS `transaction_id`,(case when (`vt`.`WORKER_TYPE` = 'BOT') then (select `bot`.`avgEfforts` from `bot` where ((`bot`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'BOT'))) else (select `human_worker`.`avgEfforts` from `human_worker` where ((`human_worker`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'HUMAN'))) end) AS `sla`,(case when (`vt`.`WORKER_TYPE` = 'BOT') then (select `bot`.`Process_Id` from `bot` where ((`bot`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'BOT'))) else (select `human_worker`.`Process_Id` from `human_worker` where ((`human_worker`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'HUMAN'))) end) AS `process_id`,(case when (`vt`.`WORKER_TYPE` = 'BOT') then (select `groups`.`Name` from `groups` where (`groups`.`ID` = (select `bot`.`Process_Id` from `bot` where ((`bot`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'BOT'))))) else (select `groups`.`Name` from `groups` where (`groups`.`ID` = (select `human_worker`.`Process_Id` from `human_worker` where ((`human_worker`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'HUMAN'))))) end) AS `process_name`,(case when (`vt`.`WORKER_TYPE` = 'BOT') then (select `bot`.`isDisabled` from `bot` where ((`bot`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'BOT'))) else (select `human_worker`.`isDisabled` from `human_worker` where ((`human_worker`.`ID` = `vt`.`WORKER_ID`) and (`vt`.`WORKER_TYPE` = 'HUMAN'))) end) AS `worker_status`,`vt`.`START_TIME` AS `start_time`,`vt`.`END_TIME` AS `end_time`,`vt`.`COUNTRY` AS `country`,timestampdiff(MINUTE,`vt`.`START_TIME`,`vt`.`END_TIME`) AS `Duration`,`vt`.`WORKER_TYPE` AS `worker`,`vt`.`WORKER_ID` AS `worker_id` from `transactions` `vt` where (`vt`.`STATUS` = '0') */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `group_transaction_view`
+--
+
+/*!50001 DROP VIEW IF EXISTS `group_transaction_view`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8 */;
+/*!50001 SET character_set_results     = utf8 */;
+/*!50001 SET collation_connection      = utf8_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `group_transaction_view` AS select `transactions`.`ID` AS `transaction_id`,(case when (`transactions`.`WORKER_TYPE` = 'BOT') then (select `bot`.`Bot_Key` from `bot` where ((`bot`.`ID` = `transactions`.`WORKER_ID`) and (`transactions`.`WORKER_TYPE` = 'BOT'))) else (select `human_worker`.`Worker_Id` from `human_worker` where ((`human_worker`.`ID` = `transactions`.`WORKER_ID`) and (`transactions`.`WORKER_TYPE` = 'HUMAN'))) end) AS `worker_id`,(case when (`transactions`.`WORKER_TYPE` = 'BOT') then (select `bot`.`isDisabled` from `bot` where ((`bot`.`ID` = `transactions`.`WORKER_ID`) and (`transactions`.`WORKER_TYPE` = 'BOT'))) else (select `human_worker`.`isDisabled` from `human_worker` where ((`human_worker`.`ID` = `transactions`.`WORKER_ID`) and (`transactions`.`WORKER_TYPE` = 'HUMAN'))) end) AS `worker_status`,(case when (`transactions`.`WORKER_TYPE` = 'BOT') then (select `bot`.`Process_Id` from `bot` where ((`bot`.`ID` = `transactions`.`WORKER_ID`) and (`transactions`.`WORKER_TYPE` = 'BOT'))) else (select `human_worker`.`Process_Id` from `human_worker` where ((`human_worker`.`ID` = `transactions`.`WORKER_ID`) and (`transactions`.`WORKER_TYPE` = 'HUMAN'))) end) AS `process_id`,(case when (`transactions`.`WORKER_TYPE` = 'BOT') then (select `groups`.`Name` from `groups` where (`groups`.`ID` = (select `bot`.`Process_Id` from `bot` where ((`bot`.`ID` = `transactions`.`WORKER_ID`) and (`transactions`.`WORKER_TYPE` = 'BOT'))))) else (select `groups`.`Name` from `groups` where (`groups`.`ID` = (select `human_worker`.`Process_Id` from `human_worker` where ((`human_worker`.`ID` = `transactions`.`WORKER_ID`) and (`transactions`.`WORKER_TYPE` = 'HUMAN'))))) end) AS `process_name`,`transactions`.`START_TIME` AS `start_time`,`transactions`.`END_TIME` AS `end_time`,timestampdiff(MINUTE,`transactions`.`START_TIME`,`transactions`.`END_TIME`) AS `duration`,(select `bot`.`avgEffortsSaved` from `bot` where ((`bot`.`ID` = `transactions`.`WORKER_ID`) and (`transactions`.`WORKER_TYPE` = 'BOT'))) AS `efforts_saved`,`transactions`.`STATUS` AS `status`,`transactions`.`WORKER_TYPE` AS `worker_type`,`transactions`.`OUT_COME` AS `out_come`,`transactions`.`DESCRIPTION` AS `description`,`transactions`.`TRACKING_ID` AS `tracking_id`,`transactions`.`COUNTRY` AS `country`,`transactions`.`B_FUNCTION` AS `function`,`transactions`.`ERROR_TYPE` AS `error_type`,`transactions`.`ERROR_CAT` AS `error_cat`,`transactions`.`BP_UUID` AS `bp_uuid` from `transactions` */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `incidents_view`
+--
+
+/*!50001 DROP VIEW IF EXISTS `incidents_view`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8 */;
+/*!50001 SET character_set_results     = utf8 */;
+/*!50001 SET collation_connection      = utf8_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `incidents_view` AS select `vi`.`TICKET_ID` AS `ticket_id`,`vi`.`STATUS` AS `status`,`vi`.`DESCRIPTION` AS `description`,`vp`.`ID` AS `process_id`,`vp`.`PROCESS_NAME` AS `process_name`,`vp`.`SLA` AS `SLA`,`vp`.`EFFORT_SAVED` AS `effort_saved`,`vp`.`SEQUENCE` AS `sequence`,`vg`.`GEOGRAPHY` AS `geography`,`vg`.`REGION` AS `region`,`vt`.`START_TIME` AS `start_time`,`vt`.`END_TIME` AS `end_time`,timestampdiff(MINUTE,`vt`.`START_TIME`,`vt`.`END_TIME`) AS `Duration`,`vt`.`WORKER` AS `worker` from ((((`vbrain_incidents` `vi` join `vbrain_process` `vp`) join `vbrain_transaction` `vt`) join `vbrain_geo` `vg`) join `vbrain_bot` `vb`) where ((`vb`.`ID` = `vt`.`BOT_ID`) and (`vb`.`PROCESS_ID` = `vp`.`ID`) and (`vg`.`ID` = `vb`.`GEO_ID`) and (`vt`.`ID` = `vi`.`TRANSACTION_ID`)) */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `sla_view`
+--
+
+/*!50001 DROP VIEW IF EXISTS `sla_view`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8 */;
+/*!50001 SET character_set_results     = utf8 */;
+/*!50001 SET collation_connection      = utf8_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `sla_view` AS select `vs`.`SLA` AS `sla`,`vp`.`PROCESS_NAME` AS `process_name`,`vp`.`ID` AS `process_id`,`vp`.`EFFORT_SAVED` AS `effort_saved`,`vp`.`SEQUENCE` AS `sequence`,`vg`.`GEOGRAPHY` AS `geography`,`vg`.`REGION` AS `region`,`vt`.`START_TIME` AS `start_time`,`vt`.`END_TIME` AS `end_time`,timestampdiff(MINUTE,`vt`.`START_TIME`,`vt`.`END_TIME`) AS `Duration`,`vt`.`WORKER` AS `worker` from ((((`vbrain_sla` `vs` join `vbrain_process` `vp`) join `vbrain_transaction` `vt`) join `vbrain_geo` `vg`) join `vbrain_bot` `vb`) where ((`vb`.`ID` = `vt`.`BOT_ID`) and (`vb`.`PROCESS_ID` = `vp`.`ID`) and (`vg`.`ID` = `vb`.`GEO_ID`) and (`vs`.`PROCESS_ID` = `vb`.`PROCESS_ID`)) group by `vt`.`ID` */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
+-- Final view structure for view `transation_view`
+--
+
+/*!50001 DROP VIEW IF EXISTS `transation_view`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8 */;
+/*!50001 SET character_set_results     = utf8 */;
+/*!50001 SET collation_connection      = utf8_general_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `transation_view` AS select `vb`.`BOT_KEY` AS `bot_key`,`vp`.`ID` AS `process_id`,`vp`.`PROCESS_NAME` AS `process_name`,`vp`.`SLA` AS `SLA`,`vp`.`EFFORT_SAVED` AS `effort_saved`,`vp`.`SEQUENCE` AS `sequence`,`vg`.`GEOGRAPHY` AS `geography`,`vg`.`REGION` AS `region`,`vt`.`START_TIME` AS `start_time`,`vt`.`END_TIME` AS `end_time`,timestampdiff(MINUTE,`vt`.`START_TIME`,`vt`.`END_TIME`) AS `Duration`,`vt`.`STATUS` AS `status`,`vt`.`WORKER` AS `worker`,`vt`.`OUT_COME` AS `out_come`,`vt`.`DESCRIPTION` AS `description` from (((`vbrain_bot` `vb` join `vbrain_process` `vp`) join `vbrain_transaction` `vt`) join `vbrain_geo` `vg`) where ((`vb`.`ID` = `vt`.`BOT_ID`) and (`vb`.`PROCESS_ID` = `vp`.`ID`) and (`vg`.`ID` = `vb`.`GEO_ID`)) */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
